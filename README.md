@@ -35,3 +35,13 @@ indexer['f']['112'] # 记录了feature_id 112中的feature_value到re-id的映�
 
 ### seq_offsets.pkl
 记录了seq.jsonl中每一行的起始文件指针offset，方便读取数据时快速定位数据位置，提升I/O效率。
+
+
+# Observations on Data
+* `indexer.pkl` does not contain additional feature information. In particular, the "feature_value" are just indices, probably categorical index. From `indexer['f']`, we can see that there are 22 feature keys in total. 14 of them are for items, and 8 of them are for users. They are not overlapping.
+* According to `item_feat_dict.json`, there are 58734 items. 
+* Not all items have all the feature keys, though most items have at least 13 keys. Items have at least 2 keys.
+* Lengths of the sequences follow a "negative" exponential-like distribution from 101 to 11, with a mean of 90 and a median of 95.
+* Not all sequences have interactions. The number of interactions range from 0 to 45, with a mean of 9 and median of 8.
+* All sequences have exactly **one** record that contains user features. This record can be anywhere in the sequence, so at test time we may not know the user feature.
+* Not all users have all the feature keys. The number of user feature keys range from 1 to 8, with a mean of 6 and median of 5.
