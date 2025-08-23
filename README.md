@@ -43,5 +43,5 @@ indexer['f']['112'] # 记录了feature_id 112中的feature_value到re-id的映�
 * Not all items have all the feature keys, though most items have at least 13 keys. Items have at least 2 keys.
 * Lengths of the sequences follow a "negative" exponential-like distribution from 101 to 11, with a mean of 90 and a median of 95.
 * Not all sequences have interactions. The number of interactions range from 0 to 45, with a mean of 9 and median of 8.
-* All sequences have exactly **one** record that contains user features. This record can be anywhere in the sequence, so at test time we may not know the user feature.
+* All sequences have exactly **one** record that contains user features. This record can be anywhere in the sequence, so at test time we may not know the user feature. # tianyi: in their model.py, how did they split the user feature and item iterations? 
 * Not all users have all the feature keys. The number of user feature keys range from 1 to 8, with a mean of 6 and median of 5.
