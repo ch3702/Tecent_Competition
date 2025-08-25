@@ -30,13 +30,17 @@ def get_args():
     parser.add_argument('--dropout_rate', default=0.2, type=float)
     parser.add_argument('--l2_emb', default=0.0, type=float)
     parser.add_argument('--device', default='cuda', type=str)
-    parser.add_argument('--inference_only', action='store_true')
+    # Flag arguments, no value needed. 
+    # E.g., python main.py sets inference_only to False, while python main.py --inference_only sets inference_only to True
+    parser.add_argument('--inference_only', action='store_true') 
     parser.add_argument('--state_dict_path', default=None, type=str)
     parser.add_argument('--norm_first', action='store_true')
 
     # MMemb Feature ID
+    # nargs='+' means that the argument can be passed multiple times, and the values will be collected into a list
     parser.add_argument('--mm_emb_id', nargs='+', default=['81'], type=str, choices=[str(s) for s in range(81, 87)])
 
+    # Parse the arguments. E.g., args.batch_size will return 128 (default) or whatever is specified
     args = parser.parse_args()
 
     return args
@@ -52,10 +56,11 @@ if __name__ == '__main__':
 
     args = get_args()
     dataset = MyDataset(data_path, args)
+    # MyDataset is a subclass of torch.utils.data.Dataset, so we can use methods like random_split
     train_dataset, valid_dataset = torch.utils.data.random_split(dataset, [0.9, 0.1])
     train_loader = DataLoader(
         train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=0, collate_fn=dataset.collate_fn
-    )
+    ) # use the collate_fn defined in the MyDataset class
     valid_loader = DataLoader(
         valid_dataset, batch_size=args.batch_size, shuffle=False, num_workers=0, collate_fn=dataset.collate_fn
     )
@@ -63,22 +68,26 @@ if __name__ == '__main__':
     feat_statistics, feat_types = dataset.feat_statistics, dataset.feature_types
 
     model = BaselineModel(usernum, itemnum, feat_statistics, feat_types, args).to(args.device)
-
+    
+    # initialize the model parameters using xavier_normal_
     for name, param in model.named_parameters():
         try:
             torch.nn.init.xavier_normal_(param.data)
         except Exception:
             pass
 
+    # manually set the padding token embeddings to 0 in the lookup tables
     model.pos_emb.weight.data[0, :] = 0
     model.item_emb.weight.data[0, :] = 0
     model.user_emb.weight.data[0, :] = 0
 
+    # manually set the padding token embeddings to 0 in the lookup tables for sparse features
     for k in model.sparse_emb:
         model.sparse_emb[k].weight.data[0, :] = 0
 
     epoch_start_idx = 1
-
+    
+    # load the model parameters from a checkpoint if provided
     if args.state_dict_path is not None:
         try:
             model.load_state_dict(torch.load(args.state_dict_path, map_location=torch.device(args.device)))
@@ -88,9 +97,10 @@ if __name__ == '__main__':
             print('failed loading state_dicts, pls check file path: ', end="")
             print(args.state_dict_path)
             raise RuntimeError('failed loading state_dicts, pls check file path!')
-
+    
+    # reduction='mean' means that the loss is averaged over the batch and the sequence length
     bce_criterion = torch.nn.BCEWithLogitsLoss(reduction='mean')
-    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, betas=(0.9, 0.98))
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, betas=(0.9, 0.98)) # betas are the coefficients for the moving average of the gradient and the gradient squared
 
     best_val_ndcg, best_val_hr = 0.0, 0.0
     best_test_ndcg, best_test_hr = 0.0, 0.0
@@ -114,6 +124,10 @@ if __name__ == '__main__':
                 neg_logits.shape, device=args.device
             )
             optimizer.zero_grad()
+            # only compute loss for the next token that is an item token
+            # The loss has two parts. 
+            # The first part is the loss for an item that the user is actually exposed to next. Treat it as a positive sample, but it may not be.
+            # The second part is the loss for an item that the user is never exposed to. Treated as a negative sample.
             indices = np.where(next_token_type == 1)
             loss = bce_criterion(pos_logits[indices], pos_labels[indices])
             loss += bce_criterion(neg_logits[indices], neg_labels[indices])

@@ -69,7 +69,7 @@ def read_result_ids(file_path):
 
 def process_cold_start_feat(feat):
     """
-    处理冷启动特征。训练集未出现过的特征value为字符串，默认转换为0.可设计替换为更好的方法。
+    处理冷启动特征。训练集未出现过的特征value为字符串, 默认转换为0.可设计替换为更好的方法。
     """
     processed_feat = {}
     for feat_id, feat_value in feat.items():
@@ -94,7 +94,7 @@ def get_candidate_emb(indexer, feat_types, feat_default_value, mm_emb_dict, mode
 
     Args:
         indexer: 索引字典
-        feat_types: 特征类型，分为user和item的sparse, array, emb, continual类型
+        feat_types: 特征类型, 分为user和item的sparse, array, emb, continual类型
         feature_default_value: 特征缺省值
         mm_emb_dict: 多模态特征字典
         model: 模型
@@ -140,6 +140,11 @@ def get_candidate_emb(indexer, feat_types, feat_default_value, mm_emb_dict, mode
 
 
 def infer():
+    """
+    Returns:
+        top10s: list of lists, each containing the top 10 items for a user
+        user_list: list of user IDs
+    """
     args = get_args()
     data_path = os.environ.get('EVAL_DATA_PATH')
     test_dataset = MyTestDataset(data_path, args)
@@ -153,19 +158,21 @@ def infer():
 
     ckpt_path = get_ckpt_path()
     model.load_state_dict(torch.load(ckpt_path, map_location=torch.device(args.device)))
+    # for all sequences in the test batch, get the embeddings of the last token in the sequence
     all_embs = []
     user_list = []
     for step, batch in tqdm(enumerate(test_loader), total=len(test_loader)):
 
         seq, token_type, seq_feat, user_id = batch
         seq = seq.to(args.device)
-        logits = model.predict(seq, seq_feat, token_type)
+        logits = model.predict(seq, seq_feat, token_type) # these are embeddings/representations of the last token in the sequence, not logits
         for i in range(logits.shape[0]):
             emb = logits[i].unsqueeze(0).detach().cpu().numpy().astype(np.float32)
             all_embs.append(emb)
         user_list += user_id
 
     # 生成候选库的embedding 以及 id文件
+    # actually gets the embeddings of all existing items
     retrieve_id2creative_id = get_candidate_emb(
         test_dataset.indexer['i'],
         test_dataset.feature_types,
@@ -177,6 +184,7 @@ def infer():
     # 保存query文件
     save_emb(all_embs, Path(os.environ.get('EVAL_RESULT_PATH'), 'query.fbin'))
     # ANN 检索
+    # Uses an external script faiss_demo to perform ANN search
     ann_cmd = (
         str(Path("/workspace", "faiss-based-ann", "faiss_demo"))
         + " --dataset_vector_file_path="
